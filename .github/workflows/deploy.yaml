@@ -18,11 +18,6 @@ on:
         required: false
         default: "server"
         type: string
-      port:
-        description: "SSH port"
-        required: false
-        default: "22"
-        type: string
 
 permissions:
   contents: read
@@ -84,7 +79,7 @@ jobs:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: ${{ inputs.port }}
+          port: 22
           source: "./artifact/${{ inputs.app_name }}"
           target: "/tmp/deploy-${{ inputs.app_name }}"
           overwrite: true
@@ -95,7 +90,7 @@ jobs:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: ${{ inputs.port }}
+          port: 22
           script: |
             set -euo pipefail
 
