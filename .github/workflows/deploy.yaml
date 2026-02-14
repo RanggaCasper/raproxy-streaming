@@ -61,96 +61,90 @@ jobs:
           if-no-files-found: error
 
   deploy:
-  needs: build-linux-amd64
-  runs-on: ubuntu-latest
+    needs: build-linux-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-linux-amd64
+          path: ./artifact
 
-  steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: app-linux-amd64
-        path: ./artifact
-
-    - name: Prepare deploy file
-      run: |
-        set -euo pipefail
-        chmod +x "./artifact/${{ inputs.app_name }}" || true
-        ls -lah ./artifact
-        echo "Artifact files:"
-        find ./artifact -maxdepth 2 -type f -print
-
-    - name: Upload binary to VPS (SCP)
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.VPS_IP }}
-        username: ${{ secrets.VPS_USER }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        port: 22
-        source: "./artifact/${{ inputs.app_name }}"
-        target: "/tmp/deploy-${{ inputs.app_name }}"
-        overwrite: true
-
-    - name: Deploy, download startup.sh, run it, then restart (SSH)
-      uses: appleboy/ssh-action@v1.1.0
-      with:
-        host: ${{ secrets.VPS_IP }}
-        username: ${{ secrets.VPS_USER }}
-        password: ${{ secrets.VPS_PASSWORD }}
-        port: 22
-        script: |
+      - name: Prepare deploy file
+        run: |
           set -euo pipefail
+          echo "Artifact files:"
+          find ./artifact -maxdepth 2 -type f -print
+          chmod +x "./artifact/${{ inputs.app_name }}" || true
+          ls -lah ./artifact
 
-          APP="${{ inputs.app_name }}"
-          DEPLOY_PATH="${{ inputs.deploy_path }}"
-          SERVICE="${{ inputs.systemd_service }}"
-          STARTUP_URL="https://raw.githubusercontent.com/RanggaCasper/raproxy-streaming/refs/heads/main/scripts/startup.sh"
-          STARTUP_PATH="/tmp/startup.sh"
+      - name: Upload binary to VPS (SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ inputs.port }}
+          source: "./artifact/${{ inputs.app_name }}"
+          target: "/tmp/deploy-${{ inputs.app_name }}"
+          overwrite: true
 
-          echo "==> Ensure deploy dir"
-          sudo mkdir -p "${DEPLOY_PATH}"
-          sudo chown -R "$(whoami)":"$(whoami)" "${DEPLOY_PATH}" || true
+      - name: Deploy, download startup.sh, run it, then restart (SSH)
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ inputs.port }}
+          script: |
+            set -euo pipefail
 
-          echo "==> Move uploaded binary into place"
-          if [ -f "/tmp/deploy-${APP}/${APP}" ]; then
-            sudo mv "/tmp/deploy-${APP}/${APP}" "${DEPLOY_PATH}/${APP}.new"
-          elif [ -f "/tmp/deploy-${APP}/artifact/${APP}" ]; then
-            sudo mv "/tmp/deploy-${APP}/artifact/${APP}" "${DEPLOY_PATH}/${APP}.new"
-          else
-            echo "ERROR: Uploaded binary not found in /tmp/deploy-${APP}"
-            ls -lah "/tmp/deploy-${APP}" || true
-            find "/tmp/deploy-${APP}" -maxdepth 3 -type f -print || true
-            exit 1
-          fi
+            APP="${{ inputs.app_name }}"
+            DEPLOY_PATH="${{ inputs.deploy_path }}"
+            SERVICE="${{ inputs.systemd_service }}"
+            STARTUP_URL="https://raw.githubusercontent.com/RanggaCasper/raproxy-streaming/refs/heads/main/scripts/startup.sh"
+            STARTUP_PATH="/tmp/startup.sh"
 
-          sudo chmod +x "${DEPLOY_PATH}/${APP}.new"
+            echo "==> Ensure deploy dir"
+            sudo mkdir -p "${DEPLOY_PATH}"
+            sudo chown -R "$(whoami)":"$(whoami)" "${DEPLOY_PATH}" || true
 
-          echo "==> Atomic swap"
-          if [ -f "${DEPLOY_PATH}/${APP}" ]; then
-            sudo mv "${DEPLOY_PATH}/${APP}" "${DEPLOY_PATH}/${APP}.bak"
-          fi
-          sudo mv "${DEPLOY_PATH}/${APP}.new" "${DEPLOY_PATH}/${APP}"
+            echo "==> Move uploaded binary into place"
+            if [ -f "/tmp/deploy-${APP}/${APP}" ]; then
+              sudo mv "/tmp/deploy-${APP}/${APP}" "${DEPLOY_PATH}/${APP}.new"
+            elif [ -f "/tmp/deploy-${APP}/artifact/${APP}" ]; then
+              sudo mv "/tmp/deploy-${APP}/artifact/${APP}" "${DEPLOY_PATH}/${APP}.new"
+            else
+              echo "ERROR: Uploaded binary not found in /tmp/deploy-${APP}"
+              ls -lah "/tmp/deploy-${APP}" || true
+              find "/tmp/deploy-${APP}" -maxdepth 3 -type f -print || true
+              exit 1
+            fi
 
-          echo "==> Download startup.sh"
-          if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "${STARTUP_URL}" -o "${STARTUP_PATH}"
-          else
-            sudo apt-get update -y
-            sudo apt-get install -y curl
-            curl -fsSL "${STARTUP_URL}" -o "${STARTUP_PATH}"
-          fi
-          chmod +x "${STARTUP_PATH}"
+            sudo chmod +x "${DEPLOY_PATH}/${APP}.new"
 
-          echo "==> Run startup.sh (trigger provisioning)"
-          # Jika startup.sh membutuhkan env var, export di sini sebelum execute
-          # contoh:
-          # export DEPLOY_PATH="${DEPLOY_PATH}"
-          # export SERVICE_NAME="${SERVICE}"
-          # export APP_BINARY="${APP}"
-          sudo bash "${STARTUP_PATH}"
+            echo "==> Atomic swap"
+            if [ -f "${DEPLOY_PATH}/${APP}" ]; then
+              sudo mv "${DEPLOY_PATH}/${APP}" "${DEPLOY_PATH}/${APP}.bak"
+            fi
+            sudo mv "${DEPLOY_PATH}/${APP}.new" "${DEPLOY_PATH}/${APP}"
 
-          echo "==> Restart service"
-          sudo systemctl daemon-reload || true
-          sudo systemctl restart "${SERVICE}"
-          sudo systemctl --no-pager status "${SERVICE}" -l || true
+            echo "==> Download startup.sh"
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "${STARTUP_URL}" -o "${STARTUP_PATH}"
+            else
+              sudo apt-get update -y
+              sudo apt-get install -y curl
+              curl -fsSL "${STARTUP_URL}" -o "${STARTUP_PATH}"
+            fi
+            chmod +x "${STARTUP_PATH}"
 
-          echo "Deploy selesai: ${DEPLOY_PATH}/${APP}"
+            echo "==> Run startup.sh (trigger provisioning)"
+            sudo bash "${STARTUP_PATH}"
+
+            echo "==> Restart service"
+            sudo systemctl daemon-reload || true
+            sudo systemctl restart "${SERVICE}"
+            sudo systemctl --no-pager status "${SERVICE}" -l || true
+
+            echo "Deploy selesai: ${DEPLOY_PATH}/${APP}"
