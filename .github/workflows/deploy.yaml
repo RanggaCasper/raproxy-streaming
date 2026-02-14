@@ -3,18 +3,6 @@ name: Deploy to VPS (manual)
 on:
   workflow_dispatch:
     inputs:
-      vps_host:
-        description: "IP / Host VPS (contoh: 123.4.567.89)"
-        required: true
-        type: string
-      vps_user:
-        description: "SSH username (contoh: example)"
-        required: true
-        type: string
-      vps_password:
-        description: "SSH password"
-        required: true
-        type: string
       app_name:
         description: "Nama app/binary (default: server)"
         required: false
@@ -93,20 +81,20 @@ jobs:
       - name: Upload binary to VPS (SCP)
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ inputs.vps_host }}
-          username: ${{ inputs.vps_user }}
-          password: ${{ inputs.vps_password }}
-          port: ${{ inputs.port }}
+          host: ${{ inputs.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
           source: "./artifact/${{ inputs.app_name }}"
           target: "/tmp/deploy-${{ inputs.app_name }}"
 
       - name: Deploy & restart service (SSH)
         uses: appleboy/ssh-action@v1.1.0
         with:
-          host: ${{ inputs.vps_host }}
-          username: ${{ inputs.vps_user }}
-          password: ${{ inputs.vps_password }}
-          port: ${{ inputs.port }}
+          host: ${{ inputs.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
           script: |
             set -euo pipefail
 
