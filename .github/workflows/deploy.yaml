@@ -60,7 +60,7 @@ jobs:
             bin/*
           if-no-files-found: error
 
-  ddeploy:
+  deploy:
   needs: build-linux-amd64
   runs-on: ubuntu-latest
 
